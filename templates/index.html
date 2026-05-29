@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MS Printhead Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body { background: #eef2f7; font-size: 13px; }
+
+    .topbar {
+      background: linear-gradient(135deg, #1565c0, #0d47a1);
+      color: #fff;
+      padding: 12px 20px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    }
+    .topbar h5 { margin: 0; font-size: 16px; font-weight: 700; }
+    .topbar .meta { font-size: 11px; opacity: .8; }
+
+    .summary-bar {
+      background: #fff;
+      border-bottom: 1px solid #dde3eb;
+      padding: 6px 20px;
+      font-size: 12px;
+      display: flex;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .machine-card {
+      background: #fff;
+      border: 1px solid #dde3eb;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+    .card-head {
+      background: #dbeafe;
+      padding: 7px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #bfdbfe;
+    }
+    .card-head.offline { background: #fee2e2; border-color: #fca5a5; }
+    .machine-label { font-weight: 700; font-size: 13px; color: #1d4ed8; }
+    .card-head.offline .machine-label { color: #b91c1c; }
+
+    .status-pill {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+
+    .color-dot {
+      display: inline-block;
+      width: 11px; height: 11px;
+      border-radius: 50%;
+      margin-right: 4px;
+      vertical-align: middle;
+      flex-shrink: 0;
+    }
+
+    table.heads-table { margin: 0; }
+    table.heads-table th {
+      background: #f8fafc;
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      padding: 4px 8px;
+      white-space: nowrap;
+    }
+    table.heads-table td { padding: 3px 8px; white-space: nowrap; font-size: 12px; }
+    table.heads-table tbody tr:hover { background: #f0f9ff; }
+
+    .offline-msg { padding: 14px; text-align: center; color: #9ca3af; font-size: 12px; }
+    .loading-msg { padding: 14px; text-align: center; color: #9ca3af; }
+
+    .pulse { animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    #refreshBtn { transition: transform .3s; }
+    #refreshBtn.spinning { animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .filter-bar {
+      background: #fff;
+      border-bottom: 1px solid #dde3eb;
+      padding: 8px 20px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar d-flex justify-content-between align-items-center">
+  <div>
+    <h5><i class="bi bi-printer-fill me-2"></i>MS Printhead Dashboard</h5>
+    <div class="meta" data-i18n="subtitle">Currently Installed Heads — MS01 to MS17</div>
+  </div>
+  <div class="text-end d-flex align-items-center gap-1 flex-wrap justify-content-end">
+    <div class="meta mb-1 w-100" id="lastUpdated" data-i18n="loading"></div>
+    <button class="btn btn-sm btn-light me-1" onclick="fetchAll()">
+      <i class="bi bi-arrow-clockwise" id="refreshBtn"></i> <span data-i18n="refresh">Refresh</span>
+    </button>
+    <a href="/history" class="btn btn-sm btn-outline-light">
+      <i class="bi bi-clock-history"></i> <span data-i18n="nav_history">History</span>
+    </a>
+    <a href="/serial" class="btn btn-sm btn-outline-light">
+      <i class="bi bi-upc-scan"></i> <span data-i18n="nav_serial">Serial</span>
+    </a>
+    <a href="/serials" class="btn btn-sm btn-outline-light">
+      <i class="bi bi-list-ul"></i> <span data-i18n="nav_all_serials">All Serials</span>
+    </a>
+    <div class="btn-group btn-group-sm ms-1">
+      <button id="btnTH" class="btn" onclick="setLang('th')">TH</button>
+      <button id="btnEN" class="btn" onclick="setLang('en')">EN</button>
+    </div>
+  </div>
+</div>
+
+<div class="summary-bar" id="summaryBar">
+  <span class="pulse text-primary"><i class="bi bi-circle-fill me-1" style="font-size:8px"></i><span data-i18n="fetching">กำลังดึงข้อมูล...</span></span>
+</div>
+
+<div class="filter-bar">
+  <div class="d-flex gap-2 align-items-center">
+    <label class="fw-bold mb-0" style="font-size:12px" data-i18n="machine_label">เครื่อง</label>
+    <select class="form-select form-select-sm" id="filterMachine" style="max-width:130px" onchange="filterMachine()">
+      <option value="" data-i18n="all">ทั้งหมด</option>
+      {% for m in machines %}
+      <option value="{{ m }}">{{ m }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+
+<div class="container-fluid p-3">
+  <div class="row" id="grid">
+    {% for m in machines %}
+    <div class="col-xl-4 col-lg-4 col-md-6 col-12" id="wrap-{{ m }}">
+      <div class="machine-card" id="card-{{ m }}">
+        <div class="card-head" id="head-{{ m }}">
+          <span class="machine-label"><i class="bi bi-cpu me-1"></i>{{ m }}
+            <span class="text-muted fw-normal ms-1" style="font-size:11px">{{ models.get(m, '') }}</span>
+          </span>
+          <span class="badge bg-secondary status-pill" id="pill-{{ m }}">
+            <i class="bi bi-circle pulse" style="font-size:8px"></i> Loading
+          </span>
+        </div>
+        <div class="loading-msg" id="body-{{ m }}">
+          <div class="spinner-border spinner-border-sm text-primary"></div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ── i18n ──────────────────────────────────────────────────────
+const LANG = {
+  th: {
+    subtitle:        'Currently Installed Heads — MS01 to MS17',
+    loading:         'กำลังโหลด...',
+    fetching:        'กำลังดึงข้อมูล...',
+    no_data:         'ไม่พบข้อมูล',
+    last_updated:    'อัปเดตล่าสุด',
+    total:           'รวม',
+    machines:        'เครื่อง',
+    error:           'เกิดข้อผิดพลาด',
+    refresh:         'Refresh',
+    nav_history:     'History',
+    nav_serial:      'Serial',
+    nav_all_serials: 'All Serials',
+    machine_label: 'เครื่อง', all: 'ทั้งหมด',
+    col_h: 'Col.', row_h: 'Row',
+    serial_before_h:  'Serial Before',
+    serial_current_h: 'Serial Current',
+    current_install_h:'Current Install',
+    color_h: 'Color', ink_h: 'Ink used',
+    running_h:   'Running Time',
+    day_unit:    'วัน',
+    total_heads: 'Total Heads',
+  },
+  en: {
+    subtitle:        'Currently Installed Heads — MS01 to MS17',
+    loading:         'Loading...',
+    fetching:        'Fetching data...',
+    no_data:         'No data',
+    last_updated:    'Last updated',
+    total:           'Total',
+    machines:        'machines',
+    error:           'Error',
+    refresh:         'Refresh',
+    nav_history:     'History',
+    nav_serial:      'Serial',
+    nav_all_serials: 'All Serials',
+    machine_label: 'Machine', all: 'All',
+    col_h: 'Col.', row_h: 'Row',
+    serial_before_h:  'Serial Before',
+    serial_current_h: 'Serial Current',
+    current_install_h:'Current Install',
+    color_h: 'Color', ink_h: 'Ink used',
+    running_h:   'Running Time',
+    day_unit:    'day(s)',
+    total_heads: 'Total Heads',
+  },
+};
+let lang = localStorage.getItem('ms_lang') || 'th';
+function t(k) { return (LANG[lang] || LANG.th)[k] || k; }
+
+function applyI18n() {
+  document.documentElement.lang = lang === 'th' ? 'th' : 'en';
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  const isTH = lang === 'th';
+  document.getElementById('btnTH').className = `btn ${isTH ? 'btn-light' : 'btn-outline-light'}`;
+  document.getElementById('btnEN').className = `btn ${!isTH ? 'btn-light' : 'btn-outline-light'}`;
+}
+
+function setLang(l) {
+  lang = l;
+  localStorage.setItem('ms_lang', l);
+  applyI18n();
+  renderAll(cachedData);
+}
+
+// ── Color / Date helpers ───────────────────────────────────────
+const COLOR_CSS = {
+  'cyan':          '#00bcd4',
+  'magenta':       '#e91e63',
+  'yellow':        '#fbc02d',
+  'black':         '#37474f',
+  'grey':          '#78909c',
+  'gray':          '#78909c',
+  'light cyan':    '#80deea',
+  'light magenta': '#f48fb1',
+  'light yellow':  '#fff176',
+  'blue':          '#1976d2',
+  'rhodamine':     '#f06292',
+  'flavine':       '#c6ef00',
+  'orange':        '#f57c00',
+  'light grey':    '#b0bec5',
+  'light gray':    '#b0bec5',
+};
+const BORDER_CSS = {
+  'light yellow': '1px solid #f9a825',
+  'light cyan':   '1px solid #00bcd4',
+  'flavine':      '1px solid #9e9d24',
+  'light grey':   '1px solid #90a4ae',
+};
+
+function colorDot(name) {
+  const k = (name || '').toLowerCase();
+  const bg = COLOR_CSS[k] || '#cbd5e1';
+  const border = BORDER_CSS[k] || 'none';
+  return `<span class="color-dot" style="background:${bg};border:${border}"></span>`;
+}
+
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function tsToDate(ts) {
+  if (!ts) return '—';
+  if (typeof ts === 'number') {
+    const d = new Date(ts * 1000);
+    return `${String(d.getDate()).padStart(2,'0')}-${MONTHS[d.getMonth()]}-${d.getFullYear()}`;
+  }
+  return ts;
+}
+
+function findBeforeSerial(head, uninstalled) {
+  const color = (head.Color || '').toLowerCase();
+  const currentTs = head.Installed || 0;
+  const match = uninstalled
+    .filter(u => (u.Color || '').toLowerCase() === color && (u.Removed || 0) <= currentTs)
+    .sort((a, b) => b.Removed - a.Removed)[0];
+  return match ? (match.Serial || '—') : '—';
+}
+
+function calcRunningTime(installedTs) {
+  if (!installedTs) return '—';
+  const days = Math.round((Date.now() - installedTs * 1000) / 86400000);
+  if (days < 1) return `< 1 ${t('day_unit')}`;
+  return `${days.toLocaleString()} ${t('day_unit')}`;
+}
+
+function renderMachine(name, result) {
+  const headEl      = document.getElementById(`head-${name}`);
+  const pillEl      = document.getElementById(`pill-${name}`);
+  const bodyEl      = document.getElementById(`body-${name}`);
+  const heads       = result.heads || [];
+  const uninstalled = result.uninstalled || [];
+
+  if (result.error || heads.length === 0) {
+    headEl.className = 'card-head offline';
+    pillEl.className = 'badge bg-danger status-pill';
+    pillEl.innerHTML = '<i class="bi bi-x-circle me-1"></i>Offline';
+    bodyEl.innerHTML = `<div class="offline-msg"><i class="bi bi-wifi-off"></i><br>${result.error || t('no_data')}</div>`;
+    return;
+  }
+
+  headEl.className = 'card-head';
+  pillEl.className = 'badge bg-success status-pill';
+  pillEl.innerHTML = `<i class="bi bi-check-circle me-1"></i>Online &nbsp;${heads.length} heads`;
+
+  const rows = heads.map(h => {
+    const col         = h.Column  ?? '—';
+    const row         = h.Row     ?? '—';
+    const serialBefore = findBeforeSerial(h, uninstalled);
+    const serialCurrent = h.Serial ?? '—';
+    const inst        = tsToDate(h.Installed);
+    const clr         = h.Color   ?? '—';
+    const ink         = h.InkType ?? '—';
+    const running     = calcRunningTime(h.Installed);
+    return `<tr>
+      <td class="text-center">${col}</td>
+      <td class="text-center">${row}</td>
+      <td class="text-muted" style="font-size:11px">${serialBefore}</td>
+      <td style="font-weight:600">${serialCurrent}</td>
+      <td class="text-center">${inst}</td>
+      <td>${colorDot(clr)}${clr}</td>
+      <td>${ink}</td>
+      <td class="text-center">${running}</td>
+    </tr>`;
+  }).join('');
+
+  bodyEl.innerHTML = `
+    <div class="table-responsive">
+      <table class="table table-sm table-hover heads-table">
+        <thead><tr>
+          <th class="text-center">${t('col_h')}</th>
+          <th class="text-center">${t('row_h')}</th>
+          <th>${t('serial_before_h')}</th>
+          <th>${t('serial_current_h')}</th>
+          <th class="text-center">${t('current_install_h')}</th>
+          <th>${t('color_h')}</th>
+          <th>${t('ink_h')}</th>
+          <th class="text-center">${t('running_h')}</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+function filterMachine() {
+  const sel = document.getElementById('filterMachine').value;
+  document.querySelectorAll('[id^="wrap-"]').forEach(el => {
+    const m = el.id.replace('wrap-', '');
+    const show = !sel || m === sel;
+    el.style.display = show ? '' : 'none';
+    el.className = show && sel
+      ? 'col-12'
+      : 'col-xl-4 col-lg-4 col-md-6 col-12';
+  });
+}
+
+let cachedData = {};
+
+function renderAll(data) {
+  let online = 0, offline = 0, totalHeads = 0;
+  for (const [name, result] of Object.entries(data)) {
+    renderMachine(name, result);
+    if (result.heads && result.heads.length) { online++; totalHeads += result.heads.length; }
+    else offline++;
+  }
+  const bar = document.getElementById('summaryBar');
+  bar.innerHTML = `
+    <span class="text-success fw-bold"><i class="bi bi-check-circle-fill me-1"></i>Online: ${online}</span>
+    <span class="text-danger fw-bold"><i class="bi bi-x-circle-fill me-1"></i>Offline: ${offline}</span>
+    <span class="text-muted">${t('total')}: ${online + offline} ${t('machines')}</span>
+    <span class="vr"></span>
+    <span class="text-primary fw-bold"><i class="bi bi-printer-fill me-1"></i>${t('total_heads')}: ${totalHeads}</span>`;
+}
+
+async function fetchAll() {
+  const btn = document.getElementById('refreshBtn');
+  const bar = document.getElementById('summaryBar');
+  btn.classList.add('spinning');
+  bar.innerHTML = `<span class="text-primary pulse"><i class="bi bi-circle-fill me-1" style="font-size:8px"></i>${t('fetching')}</span>`;
+
+  try {
+    const resp = await fetch('/api/heads');
+    const data = await resp.json();
+    cachedData = data;
+
+    const locale = lang === 'th' ? 'th-TH' : 'en-US';
+    document.getElementById('lastUpdated').textContent =
+      t('last_updated') + ': ' + new Date().toLocaleString(locale);
+
+    renderAll(data);
+  } catch (e) {
+    document.getElementById('lastUpdated').textContent = t('error');
+    bar.innerHTML = `<span class="text-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>${e.message}</span>`;
+  } finally {
+    btn.classList.remove('spinning');
+  }
+}
+
+// Init
+applyI18n();
+fetchAll();
+setInterval(fetchAll, 60000);
+</script>
+</body>
+</html>

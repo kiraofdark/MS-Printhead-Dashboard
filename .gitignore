@@ -1,0 +1,19 @@
+# ── ข้อมูลจริง — ห้าม push ──────────────────────────────────
+history.db
+snapshot.log
+machines.ini
+
+# ── สร้างได้จาก create_sample_db.py — ไม่จำเป็นต้อง push ──
+history_sample.db
+
+# ── Python cache ─────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+
+# ── OS / Editor ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>All Serial Numbers</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body { background: #eef2f7; font-size: 13px; }
+    .topbar {
+      background: linear-gradient(135deg, #1565c0, #0d47a1);
+      color: #fff; padding: 12px 20px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.25);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .topbar h5 { margin: 0; font-size: 16px; font-weight: 700; }
+
+    .filter-bar {
+      background: #fff;
+      border-bottom: 1px solid #dde3eb;
+      padding: 8px 20px;
+      position: sticky; top: 56px; z-index: 99;
+    }
+
+    .color-dot {
+      display: inline-block; width: 11px; height: 11px;
+      border-radius: 50%; margin-right: 4px; vertical-align: middle;
+    }
+    .machine-badge {
+      display: inline-block; padding: 1px 7px; border-radius: 10px;
+      color: #fff; font-weight: 600; font-size: 10px; margin: 1px;
+    }
+    .status-installed   { background: #dcfce7; color: #166534; font-weight:600; }
+    .status-uninstalled { background: #f1f5f9; color: #64748b; }
+
+    table th { white-space: nowrap; font-size: 12px; background: #f8fafc; color: #475569; }
+    table td { vertical-align: middle; }
+    table th.sortable { cursor: pointer; user-select: none; }
+    table th.sortable:hover { background: #e2e8f0; }
+    table th .sort-icon { font-size: 10px; margin-left: 3px; opacity: .5; }
+    table th.asc  .sort-icon::before { content: '▲'; }
+    table th.desc .sort-icon::before { content: '▼'; }
+    table th:not(.asc):not(.desc) .sort-icon::before { content: '⇅'; }
+
+    tbody tr:hover { background: #f0f9ff !important; cursor: pointer; }
+    .summary-bar { font-size: 12px; display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+  </style>
+</head>
+<body>
+
+<div class="topbar d-flex justify-content-between align-items-center">
+  <div>
+    <h5><i class="bi bi-list-ul me-2"></i>All Serial Numbers</h5>
+    <small style="opacity:.8" data-i18n="subtitle">รายการ Serial No. ทั้งหมดจากทุกเครื่อง</small>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <a href="/"        class="btn btn-sm btn-light"><i class="bi bi-speedometer2"></i> <span data-i18n="nav_dashboard">Dashboard</span></a>
+    <a href="/history" class="btn btn-sm btn-outline-light"><i class="bi bi-clock-history"></i> <span data-i18n="nav_history">History</span></a>
+    <a href="/serial"  class="btn btn-sm btn-outline-light"><i class="bi bi-upc-scan"></i> <span data-i18n="nav_serial">Serial Search</span></a>
+    <div class="btn-group btn-group-sm ms-1">
+      <button id="btnTH" class="btn" onclick="setLang('th')">TH</button>
+      <button id="btnEN" class="btn" onclick="setLang('en')">EN</button>
+    </div>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <div class="input-group input-group-sm" style="max-width:240px">
+      <span class="input-group-text"><i class="bi bi-search"></i></span>
+      <input type="text" class="form-control" id="filterText" data-i18n-ph="search_ph" oninput="applyFilter()">
+    </div>
+    <select class="form-select form-select-sm" id="filterStatus" style="max-width:140px" onchange="applyFilter()">
+      <option value="" data-i18n="all_status">ทุกสถานะ</option>
+      <option value="installed">Installed</option>
+      <option value="uninstalled">Uninstalled</option>
+    </select>
+    <select class="form-select form-select-sm" id="filterColor" style="max-width:140px" onchange="applyFilter()">
+      <option value="" data-i18n="all_colors">ทุกสี</option>
+    </select>
+    <div class="d-flex align-items-center gap-1">
+      <span class="text-muted" style="font-size:11px;white-space:nowrap" data-i18n="date_from">ติดตั้ง ตั้งแต่</span>
+      <input type="date" class="form-control form-control-sm" id="filterDateFrom" style="max-width:140px" onchange="applyFilter()">
+      <span class="text-muted" style="font-size:11px" data-i18n="date_to">ถึง</span>
+      <input type="date" class="form-control form-control-sm" id="filterDateTo" style="max-width:140px" onchange="applyFilter()">
+      <button class="btn btn-sm btn-outline-secondary" onclick="clearDateFilter()" title="Clear date" data-i18n-title="clear_date">
+        <i class="bi bi-x"></i>
+      </button>
+    </div>
+    <button class="btn btn-sm btn-primary" onclick="loadData()">
+      <i class="bi bi-arrow-clockwise"></i> <span data-i18n="refresh">Refresh</span>
+    </button>
+    <button class="btn btn-sm btn-success" onclick="exportExcel()">
+      <i class="bi bi-file-earmark-excel"></i> <span data-i18n="export_excel">Export Excel</span>
+    </button>
+    <div class="ms-auto" id="summaryBar" style="font-size:12px;color:#64748b"></div>
+  </div>
+</div>
+
+<div class="container-fluid p-3">
+  <div id="content">
+    <div class="text-center p-4">
+      <div class="spinner-border text-primary"></div>
+      <p class="mt-2 text-muted" data-i18n="fetching_live">ดึงข้อมูล Live จากทุกเครื่อง...</p>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+// ── i18n ──────────────────────────────────────────────────────
+const LANG = {
+  th: {
+    subtitle:       'รายการ Serial No. ทั้งหมดจากทุกเครื่อง',
+    nav_dashboard:  'Dashboard',
+    nav_history:    'History',
+    nav_serial:     'Serial Search',
+    search_ph:      'ค้นหา Serial / Color...',
+    all_status:     'ทุกสถานะ',
+    all_colors:     'ทุกสี',
+    refresh:        'Refresh',
+    export_excel:   'Export Excel',
+    fetching_live:  'ดึงข้อมูล Live จากทุกเครื่อง...',
+    fetching_short: 'ดึงข้อมูล Live...',
+    in_service:     'Active',
+    no_data:        'ไม่พบข้อมูล',
+    error_prefix:   'เกิดข้อผิดพลาด: ',
+    click_timeline: 'คลิกเพื่อดู Timeline',
+    total_showing:  (t, s) => `รวม: ${t} | แสดง: ${s}`,
+    col_row:        'Col/Row',
+    th_serial:      'Serial No.',
+    th_status:      'Status',
+    th_machine:     'Machine',
+    th_color:       'Color',
+    th_ink:         'Ink Type',
+    th_installed:   'Installed',
+    th_removed:     'Removed',
+    date_from:      'ติดตั้ง ตั้งแต่',
+    date_to:        'ถึง',
+    clear_date:     'ล้างวันที่',
+  },
+  en: {
+    subtitle:       'All Serial Numbers from all machines',
+    nav_dashboard:  'Dashboard',
+    nav_history:    'History',
+    nav_serial:     'Serial Search',
+    search_ph:      'Search Serial / Color...',
+    all_status:     'All Status',
+    all_colors:     'All Colors',
+    refresh:        'Refresh',
+    export_excel:   'Export Excel',
+    fetching_live:  'Fetching live data from all machines...',
+    fetching_short: 'Fetching live data...',
+    in_service:     'Active',
+    no_data:        'No data found',
+    error_prefix:   'Error: ',
+    click_timeline: 'Click to view Timeline',
+    total_showing:  (t, s) => `Total: ${t} | Showing: ${s}`,
+    col_row:        'Col/Row',
+    th_serial:      'Serial No.',
+    th_status:      'Status',
+    th_machine:     'Machine',
+    th_color:       'Color',
+    th_ink:         'Ink Type',
+    th_installed:   'Installed',
+    th_removed:     'Removed',
+    date_from:      'Installed from',
+    date_to:        'to',
+    clear_date:     'Clear date',
+  },
+};
+let lang = localStorage.getItem('ms_lang') || 'th';
+function t(k) { const v = (LANG[lang]||LANG.th)[k]; return typeof v === 'function' ? v : (v || k); }
+function tf(k, ...args) { const v = (LANG[lang]||LANG.th)[k]; return typeof v === 'function' ? v(...args) : v; }
+
+function applyI18n() {
+  document.documentElement.lang = lang === 'th' ? 'th' : 'en';
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+  const isTH = lang === 'th';
+  document.getElementById('btnTH').className = `btn ${isTH ? 'btn-light' : 'btn-outline-light'}`;
+  document.getElementById('btnEN').className = `btn ${!isTH ? 'btn-light' : 'btn-outline-light'}`;
+}
+
+function setLang(l) {
+  lang = l;
+  localStorage.setItem('ms_lang', l);
+  applyI18n();
+  if (allData.length) populateColorFilter();
+  applyFilter();
+}
+
+// ── Helpers ───────────────────────────────────────────────────
+const COLOR_CSS = {
+  'cyan':'#00bcd4','magenta':'#e91e63','yellow':'#fbc02d','black':'#37474f',
+  'grey':'#78909c','gray':'#78909c','light cyan':'#80deea','light magenta':'#f48fb1',
+  'light yellow':'#fff176','blue':'#1976d2','rhodamine':'#f06292','flavine':'#c6ef00',
+  'orange':'#f57c00','light grey':'#b0bec5','light gray':'#b0bec5',
+};
+const MACHINE_BG = {
+  'MS01':'#1565c0','MS02':'#0277bd','MS03':'#006064','MS04':'#2e7d32',
+  'MS05':'#558b2f','MS06':'#e65100','MS07':'#bf360c','MS08':'#880e4f',
+  'MS09':'#6a1b9a','MS10':'#1a237e','MS11':'#004d40','MS12':'#33691e',
+  'MS13':'#f57f17','MS14':'#4e342e','MS15':'#37474f','MS17':'#455a64',
+};
+
+function colorDot(name) {
+  const k = (name || '').toLowerCase();
+  return `<span class="color-dot" style="background:${COLOR_CSS[k]||'#cbd5e1'}"></span>`;
+}
+function machineBadge(name) {
+  return `<span class="machine-badge" style="background:${MACHINE_BG[name]||'#64748b'}">${name}</span>`;
+}
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function tsToDate(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts * 1000);
+  return `${String(d.getDate()).padStart(2,'0')}-${MONTHS[d.getMonth()]}-${d.getFullYear()}`;
+}
+
+let allData = [];
+let currentFiltered = [];
+let sortCol = 'serial', sortDir = 'asc';
+
+async function loadData() {
+  document.getElementById('content').innerHTML =
+    `<div class="text-center p-4"><div class="spinner-border text-primary"></div><p class="mt-2 text-muted">${t('fetching_short')}</p></div>`;
+  try {
+    const resp = await fetch('/api/serials');
+    allData = await resp.json();
+    populateColorFilter();
+    applyFilter();
+  } catch(e) {
+    document.getElementById('content').innerHTML =
+      `<div class="alert alert-danger m-3">${t('error_prefix')}${e.message}</div>`;
+  }
+}
+
+function populateColorFilter() {
+  const colors = [...new Set(allData.map(d => d.color).filter(Boolean))].sort();
+  const sel = document.getElementById('filterColor');
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">${t('all_colors')}</option>` +
+    colors.map(c => `<option value="${c}"${c===cur?' selected':''}>${c}</option>`).join('');
+}
+
+function applyFilter() {
+  const text     = document.getElementById('filterText').value.toLowerCase();
+  const status   = document.getElementById('filterStatus').value;
+  const color    = document.getElementById('filterColor').value;
+  const dateFrom = document.getElementById('filterDateFrom').value;
+  const dateTo   = document.getElementById('filterDateTo').value;
+  const tsFrom   = dateFrom ? new Date(dateFrom).getTime() / 1000 : null;
+  const tsTo     = dateTo   ? (new Date(dateTo).getTime() / 1000 + 86399) : null;
+
+  let filtered = allData.filter(d => {
+    if (status && d.status !== status) return false;
+    if (color  && d.color  !== color)  return false;
+    if (tsFrom && (!d.installed_ts || d.installed_ts < tsFrom)) return false;
+    if (tsTo   && (!d.installed_ts || d.installed_ts > tsTo))   return false;
+    if (text && !(
+      d.serial.toLowerCase().includes(text) ||
+      (d.color    || '').toLowerCase().includes(text) ||
+      (d.ink_type || '').toLowerCase().includes(text) ||
+      (d.machine  || '').toLowerCase().includes(text)
+    )) return false;
+    return true;
+  });
+
+  filtered = sortData(filtered);
+  currentFiltered = filtered;
+  renderTable(filtered);
+  renderSummary(filtered);
+}
+
+function sortData(data) {
+  return [...data].sort((a, b) => {
+    let va = a[sortCol] ?? '', vb = b[sortCol] ?? '';
+    if (sortCol === 'installed_ts' || sortCol === 'removed_ts') {
+      va = va || 0; vb = vb || 0;
+    } else {
+      va = String(va).toLowerCase(); vb = String(vb).toLowerCase();
+    }
+    if (va < vb) return sortDir === 'asc' ? -1 : 1;
+    if (va > vb) return sortDir === 'asc' ?  1 : -1;
+    return 0;
+  });
+}
+
+function setSort(col) {
+  if (sortCol === col) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  else { sortCol = col; sortDir = 'asc'; }
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.classList.remove('asc','desc');
+    if (th.dataset.col === col) th.classList.add(sortDir);
+  });
+  applyFilter();
+}
+
+function renderSummary(data) {
+  const total     = allData.length;
+  const installed = allData.filter(d => d.status === 'installed').length;
+  const showing   = data.length;
+  document.getElementById('summaryBar').innerHTML =
+    `<span class="text-success fw-bold me-2"><i class="bi bi-check-circle-fill me-1"></i>Installed: ${installed}</span>` +
+    `<span class="text-secondary fw-bold me-2">Uninstalled: ${total - installed}</span>` +
+    `<span class="text-muted">${tf('total_showing', total, showing)}</span>`;
+}
+
+function renderTable(data) {
+  if (!data.length) {
+    document.getElementById('content').innerHTML =
+      `<div class="text-center p-4 text-muted"><i class="bi bi-inbox" style="font-size:2rem"></i><p class="mt-2">${t('no_data')}</p></div>`;
+    return;
+  }
+
+  const rows = data.map((d, i) => {
+    const statusBadge = d.status === 'installed'
+      ? `<span class="status-installed px-2 py-1 rounded">● Installed</span>`
+      : `<span class="status-uninstalled px-2 py-1 rounded">○ Uninstalled</span>`;
+    const machineCell = d.status === 'installed'
+      ? machineBadge(d.machine)
+      : (d.machines_history || []).map(m => machineBadge(m)).join('');
+    const colRow = d.col != null ? `Col.${d.col} Row.${d.row}` : '—';
+    const removedCell = d.removed_ts
+      ? tsToDate(d.removed_ts)
+      : (d.status === 'installed' ? `<span class="text-success">${t('in_service')}</span>` : '—');
+    return `<tr onclick="window.location='/serial?q=${encodeURIComponent(d.serial)}'" title="${t('click_timeline')}">
+      <td class="text-muted" style="font-size:11px">${i+1}</td>
+      <td style="font-family:monospace;font-weight:600">${d.serial}</td>
+      <td>${statusBadge}</td>
+      <td>${machineCell}</td>
+      <td style="font-size:11px">${colRow}</td>
+      <td>${colorDot(d.color)}${d.color || '—'}</td>
+      <td class="text-muted">${d.ink_type || '—'}</td>
+      <td class="text-center">${tsToDate(d.installed_ts)}</td>
+      <td class="text-center">${removedCell}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('content').innerHTML = `
+    <div class="card border-0 shadow-sm">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0" id="mainTable">
+          <thead>
+            <tr>
+              <th style="width:36px">#</th>
+              <th class="sortable" data-col="serial" onclick="setSort('serial')">${t('th_serial')} <span class="sort-icon"></span></th>
+              <th class="sortable" data-col="status" onclick="setSort('status')">${t('th_status')} <span class="sort-icon"></span></th>
+              <th>${t('th_machine')}</th>
+              <th>${t('col_row')}</th>
+              <th class="sortable" data-col="color" onclick="setSort('color')">${t('th_color')} <span class="sort-icon"></span></th>
+              <th>${t('th_ink')}</th>
+              <th class="sortable text-center" data-col="installed_ts" onclick="setSort('installed_ts')">${t('th_installed')} <span class="sort-icon"></span></th>
+              <th class="sortable text-center" data-col="removed_ts"   onclick="setSort('removed_ts')">${t('th_removed')} <span class="sort-icon"></span></th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.classList.remove('asc','desc');
+    if (th.dataset.col === sortCol) th.classList.add(sortDir);
+  });
+}
+
+function clearDateFilter() {
+  document.getElementById('filterDateFrom').value = '';
+  document.getElementById('filterDateTo').value   = '';
+  applyFilter();
+}
+
+function exportExcel() {
+  if (!currentFiltered.length) return;
+
+  const today = new Date();
+  const dateStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+
+  const headers = ['#', 'Serial No.', 'Status', 'Machine', 'Col/Row', 'Color', 'Ink Type', 'Installed', 'Removed'];
+
+  const sanitize = s => typeof s === 'string' ? s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F￾￿]/g, '') : s;
+  const ev = v => { const c = sanitize(v); return (c == null || c === '') ? null : c; };
+
+  const rows = currentFiltered.map((d, i) => {
+    const machine = d.status === 'installed'
+      ? d.machine
+      : (d.machines_history || []).join(', ');
+    const colRow = d.col != null ? `Col.${d.col} Row.${d.row}` : null;
+    const installed = d.installed_ts ? tsToDate(d.installed_ts) : null;
+    const removed   = d.removed_ts   ? tsToDate(d.removed_ts)   : (d.status === 'installed' ? 'Active' : null);
+    return [i + 1, ev(d.serial), ev(d.status), ev(machine), colRow, ev(d.color), ev(d.ink_type), installed, removed];
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+  // Column widths
+  ws['!cols'] = [
+    {wch:5}, {wch:16}, {wch:13}, {wch:22}, {wch:14},
+    {wch:14}, {wch:18}, {wch:14}, {wch:14}
+  ];
+
+  // Style header row bold (xlsx full supports basic styles)
+  headers.forEach((_, ci) => {
+    const cell = ws[XLSX.utils.encode_cell({r:0, c:ci})];
+    if (cell) cell.s = { font: { bold: true }, fill: { fgColor: { rgb: 'DBEAFE' } } };
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Serials');
+  XLSX.writeFile(wb, `serials_${dateStr}.xlsx`);
+}
+
+// Init
+applyI18n();
+loadData();
+</script>
+</body>
+</html>

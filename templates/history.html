@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MS Printhead History</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body { background: #eef2f7; font-size: 13px; }
+
+    .topbar {
+      background: linear-gradient(135deg, #1565c0, #0d47a1);
+      color: #fff;
+      padding: 12px 20px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    }
+    .topbar h5 { margin: 0; font-size: 16px; font-weight: 700; }
+
+    .filter-bar {
+      background: #fff;
+      border-bottom: 1px solid #dde3eb;
+      padding: 10px 20px;
+    }
+
+    .machine-card {
+      background: #fff;
+      border: 1px solid #dde3eb;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+    .card-head {
+      background: #dbeafe;
+      padding: 7px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #bfdbfe;
+    }
+    .machine-label { font-weight: 700; font-size: 13px; color: #1d4ed8; }
+
+    .color-dot {
+      display: inline-block;
+      width: 11px; height: 11px;
+      border-radius: 50%;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+
+    table.heads-table { margin: 0; }
+    table.heads-table th {
+      background: #f8fafc;
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      padding: 4px 8px;
+      white-space: nowrap;
+    }
+    table.heads-table td { padding: 3px 8px; white-space: nowrap; font-size: 12px; }
+    table.heads-table tbody tr:hover { background: #f0f9ff; }
+
+    .date-badge {
+      font-size: 10px;
+      background: #e0e7ff;
+      color: #3730a3;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+    .time-badge { font-size: 10px; color: #6b7280; }
+    .empty-state { text-align: center; padding: 40px; color: #9ca3af; }
+  </style>
+</head>
+<body>
+
+<div class="topbar d-flex justify-content-between align-items-center">
+  <div>
+    <h5><i class="bi bi-clock-history me-2"></i>Printhead History</h5>
+    <small style="opacity:.8" data-i18n="subtitle">บันทึกประวัติการติดตั้ง Printhead รายวัน</small>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <a href="/" class="btn btn-sm btn-light">
+      <i class="bi bi-speedometer2"></i> <span data-i18n="nav_dashboard">Dashboard</span>
+    </a>
+    <a href="/serial" class="btn btn-sm btn-outline-light">
+      <i class="bi bi-upc-scan"></i> <span data-i18n="nav_serial">Serial</span>
+    </a>
+    <a href="/serials" class="btn btn-sm btn-outline-light">
+      <i class="bi bi-list-ul"></i> <span data-i18n="nav_all_serials">All Serials</span>
+    </a>
+    <div class="btn-group btn-group-sm ms-1">
+      <button id="btnTH" class="btn" onclick="setLang('th')">TH</button>
+      <button id="btnEN" class="btn" onclick="setLang('en')">EN</button>
+    </div>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <div class="row g-2 align-items-end">
+    <div class="col-auto">
+      <label class="form-label mb-1 fw-bold" style="font-size:12px" data-i18n="date_label">วันที่</label>
+      <input type="date" class="form-control form-control-sm" id="filterDate">
+    </div>
+    <div class="col-auto">
+      <label class="form-label mb-1 fw-bold" style="font-size:12px" data-i18n="machine_label">เครื่อง</label>
+      <select class="form-select form-select-sm" id="filterMachine"
+              style="min-width:110px" onchange="searchHistory()">
+        <option value="" data-i18n="all">ทั้งหมด</option>
+        {% for m in machines %}
+        <option value="{{ m }}">{{ m }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <button class="btn btn-primary btn-sm" onclick="searchHistory()">
+        <i class="bi bi-search"></i> <span data-i18n="search_btn">ค้นหา</span>
+      </button>
+      <button class="btn btn-outline-secondary btn-sm ms-1" onclick="loadDates()">
+        <i class="bi bi-calendar3"></i> <span data-i18n="avail_dates">วันที่มีข้อมูล</span>
+      </button>
+      <button class="btn btn-success btn-sm ms-1" onclick="exportExcel()">
+        <i class="bi bi-file-earmark-excel"></i> <span data-i18n="export_excel">Export Excel</span>
+      </button>
+    </div>
+    <div class="col-auto" id="dateListWrap" style="display:none">
+      <select class="form-select form-select-sm" id="dateList" onchange="pickDate(this.value)" style="min-width:130px">
+        <option value="" data-i18n="select_date">— เลือกวันที่ —</option>
+      </select>
+    </div>
+    <div class="col-auto ms-auto text-muted" id="resultCount" style="font-size:12px"></div>
+  </div>
+</div>
+
+<div class="container-fluid p-3" id="content">
+  <div class="empty-state">
+    <i class="bi bi-calendar-event" style="font-size:2rem"></i>
+    <p class="mt-2" id="emptyMsg" data-i18n="empty_msg">เลือกวันที่แล้วกด ค้นหา<br>หรือกด "วันที่มีข้อมูล" เพื่อดูว่ามีข้อมูลวันไหนบ้าง</p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+const MODELS = {{ models | tojson }};
+
+// ── i18n ──────────────────────────────────────────────────────
+const LANG = {
+  th: {
+    subtitle:       'บันทึกประวัติการติดตั้ง Printhead รายวัน',
+    nav_dashboard:  'Dashboard',
+    nav_serial:     'Serial',
+    nav_all_serials:'All Serials',
+    date_label:     'วันที่',
+    machine_label:  'เครื่อง',
+    all:            'ทั้งหมด',
+    search_btn:     'ค้นหา',
+    avail_dates:    'วันที่มีข้อมูล',
+    select_date:    '— เลือกวันที่ —',
+    empty_msg:      'เลือกวันที่แล้วกด ค้นหา หรือกด "วันที่มีข้อมูล" เพื่อดูว่ามีข้อมูลวันไหนบ้าง',
+    no_data_filter: 'ไม่พบข้อมูลสำหรับเงื่อนไขที่เลือก',
+    no_data_row:    'ไม่มีข้อมูล',
+    found_n:        (n) => `พบ ${n} รายการ`,
+    error_prefix:   'เกิดข้อผิดพลาด: ',
+    fetch_dates_err:'ดึงรายการวันที่ไม่ได้: ',
+    export_excel:   'Export Excel',
+    installed_section: (n) => `Currently Installed (${n})`,
+    uninstalled_section: (n) => `Uninstalled (${n})`,
+    col_h: 'Col.', row_h: 'Row', serial_h: 'Serial',
+    installed_h: 'Installed', removed_h: 'Removed',
+    color_h: 'Color', ink_h: 'Ink used',
+  },
+  en: {
+    subtitle:       'Daily printhead installation history',
+    nav_dashboard:  'Dashboard',
+    nav_serial:     'Serial',
+    nav_all_serials:'All Serials',
+    date_label:     'Date',
+    machine_label:  'Machine',
+    all:            'All',
+    search_btn:     'Search',
+    avail_dates:    'Available Dates',
+    select_date:    '— Select Date —',
+    empty_msg:      'Select a date and click Search, or click "Available Dates" to see all recorded dates',
+    no_data_filter: 'No data for selected filter',
+    no_data_row:    'No data',
+    found_n:        (n) => `Found ${n} record(s)`,
+    error_prefix:   'Error: ',
+    fetch_dates_err:'Cannot fetch dates: ',
+    export_excel:   'Export Excel',
+    installed_section: (n) => `Currently Installed (${n})`,
+    uninstalled_section: (n) => `Uninstalled (${n})`,
+    col_h: 'Col.', row_h: 'Row', serial_h: 'Serial',
+    installed_h: 'Installed', removed_h: 'Removed',
+    color_h: 'Color', ink_h: 'Ink used',
+  },
+};
+let lang = localStorage.getItem('ms_lang') || 'th';
+function t(k) { const v = (LANG[lang]||LANG.th)[k]; return typeof v === 'function' ? v : (v || k); }
+function tf(k, ...args) { const v = (LANG[lang]||LANG.th)[k]; return typeof v === 'function' ? v(...args) : v; }
+
+function applyI18n() {
+  document.documentElement.lang = lang === 'th' ? 'th' : 'en';
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  const isTH = lang === 'th';
+  document.getElementById('btnTH').className = `btn ${isTH ? 'btn-light' : 'btn-outline-light'}`;
+  document.getElementById('btnEN').className = `btn ${!isTH ? 'btn-light' : 'btn-outline-light'}`;
+}
+
+function setLang(l) {
+  lang = l;
+  localStorage.setItem('ms_lang', l);
+  applyI18n();
+  if (cachedHistory.length) renderHistory(cachedHistory);
+}
+
+// ── Color / Date helpers ───────────────────────────────────────
+const COLOR_CSS = {
+  'cyan':'#00bcd4','magenta':'#e91e63','yellow':'#fbc02d','black':'#37474f',
+  'grey':'#78909c','gray':'#78909c','light cyan':'#80deea','light magenta':'#f48fb1',
+  'light yellow':'#fff176','blue':'#1976d2','rhodamine':'#f06292','flavine':'#c6ef00',
+  'orange':'#f57c00','light grey':'#b0bec5','light gray':'#b0bec5',
+};
+const BORDER_CSS = {
+  'light yellow':'1px solid #f9a825','light cyan':'1px solid #00bcd4',
+  'flavine':'1px solid #9e9d24','light grey':'1px solid #90a4ae',
+};
+
+function colorDot(name) {
+  const k = (name||'').toLowerCase();
+  const bg = COLOR_CSS[k]||'#cbd5e1';
+  const border = BORDER_CSS[k]||'none';
+  return `<span class="color-dot" style="background:${bg};border:${border}"></span>`;
+}
+
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function tsToDate(ts) {
+  if (!ts) return '—';
+  if (typeof ts === 'number') {
+    const d = new Date(ts * 1000);
+    return `${String(d.getDate()).padStart(2,'0')}-${MONTHS[d.getMonth()]}-${d.getFullYear()}`;
+  }
+  return ts;
+}
+
+function buildTable(heads, showCol = true) {
+  if (!heads || heads.length === 0)
+    return `<p class="text-muted p-2 mb-0" style="font-size:12px">${t('no_data_row')}</p>`;
+
+  const rows = heads.map(h => {
+    const sn   = h.Serial  ?? '—';
+    const inst = tsToDate(h.Installed);
+    const clr  = h.Color   ?? '—';
+    const ink  = h.InkType ?? '—';
+    const colCell = showCol
+      ? `<td class="text-center">${h.Column ?? '—'}</td><td class="text-center">${h.Row ?? '—'}</td>`
+      : '';
+    const rmvCell = !showCol && h.Removed
+      ? `<td class="text-center">${tsToDate(h.Removed)}</td>`
+      : '';
+    return `<tr>
+      ${colCell}
+      <td>${sn}</td>
+      <td class="text-center">${inst}</td>
+      ${rmvCell}
+      <td>${colorDot(clr)}${clr}</td>
+      <td>${ink}</td>
+    </tr>`;
+  }).join('');
+
+  const colHeaders = showCol
+    ? `<th class="text-center">${t('col_h')}</th><th class="text-center">${t('row_h')}</th>`
+    : '';
+  const rmvHeader = !showCol ? `<th class="text-center">${t('removed_h')}</th>` : '';
+
+  return `<div class="table-responsive">
+    <table class="table table-sm table-hover heads-table">
+      <thead><tr>
+        ${colHeaders}
+        <th>${t('serial_h')}</th>
+        <th class="text-center">${t('installed_h')}</th>
+        ${rmvHeader}
+        <th>${t('color_h')}</th>
+        <th>${t('ink_h')}</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+let cachedHistory = [];
+
+function renderHistory(data) {
+  const content  = document.getElementById('content');
+  const countEl  = document.getElementById('resultCount');
+
+  if (!data.length) {
+    content.innerHTML = `<div class="empty-state">
+      <i class="bi bi-inbox" style="font-size:2rem"></i>
+      <p class="mt-2">${t('no_data_filter')}</p>
+    </div>`;
+    countEl.textContent = '';
+    return;
+  }
+
+  countEl.textContent = tf('found_n', data.length);
+
+  let html = '<div class="row">';
+  for (const item of data) {
+    const ts = item.timestamp ? item.timestamp.replace('T',' ').split('.')[0] : '';
+    const uninstalled = item.uninstalled || [];
+    const uninstalledSection = uninstalled.length
+      ? `<div class="px-2 pb-1">
+           <div class="text-muted fw-bold mt-2 mb-1" style="font-size:11px">
+             <i class="bi bi-archive me-1"></i>${tf('uninstalled_section', uninstalled.length)}
+           </div>
+           ${buildTable(uninstalled, false)}
+         </div>`
+      : '';
+    html += `
+      <div class="col-xl-4 col-lg-4 col-md-6 col-12">
+        <div class="machine-card">
+          <div class="card-head">
+            <span class="machine-label"><i class="bi bi-cpu me-1"></i>${item.machine}
+              <span class="fw-normal ms-1" style="font-size:11px;color:#64748b">${MODELS[item.machine] || ''}</span>
+            </span>
+            <span>
+              <span class="date-badge me-1">${item.date}</span>
+              <span class="time-badge">${ts.split(' ')[1] || ''}</span>
+            </span>
+          </div>
+          <div class="px-0 pt-0">
+            <div class="text-muted fw-bold px-2 pt-2 mb-1" style="font-size:11px">
+              <i class="bi bi-check2-circle me-1 text-success"></i>${tf('installed_section', item.data.length)}
+            </div>
+            ${buildTable(item.data, true)}
+          </div>
+          ${uninstalledSection}
+        </div>
+      </div>`;
+  }
+  html += '</div>';
+  content.innerHTML = html;
+}
+
+async function searchHistory() {
+  const dateVal    = document.getElementById('filterDate').value;
+  const machineVal = document.getElementById('filterMachine').value;
+  const content    = document.getElementById('content');
+  const countEl    = document.getElementById('resultCount');
+
+  content.innerHTML = '<div class="text-center p-4"><div class="spinner-border text-primary"></div></div>';
+  countEl.textContent = '';
+
+  const params = new URLSearchParams();
+  if (dateVal)    params.set('date', dateVal);
+  if (machineVal) params.set('machine', machineVal);
+
+  try {
+    const resp = await fetch('/api/history?' + params.toString());
+    const data = await resp.json();
+    cachedHistory = data;
+    renderHistory(data);
+  } catch (e) {
+    content.innerHTML = `<div class="alert alert-danger m-3">${t('error_prefix')}${e.message}</div>`;
+  }
+}
+
+async function loadDates() {
+  const wrap = document.getElementById('dateListWrap');
+  const sel  = document.getElementById('dateList');
+  try {
+    const resp  = await fetch('/api/history/dates');
+    const dates = await resp.json();
+    sel.innerHTML = `<option value="">${t('select_date')}</option>` +
+      dates.map(d => `<option value="${d}">${d}</option>`).join('');
+    wrap.style.display = '';
+  } catch(e) {
+    document.getElementById('content').innerHTML =
+      `<div class="alert alert-danger m-3">${t('fetch_dates_err')}${e.message}</div>`;
+  }
+}
+
+function pickDate(val) {
+  if (!val) return;
+  document.getElementById('filterDate').value = val;
+  searchHistory();
+}
+
+function exportExcel() {
+  if (!cachedHistory.length) {
+    alert('ไม่มีข้อมูล — กรุณาค้นหาข้อมูลก่อน');
+    return;
+  }
+  const dateVal = document.getElementById('filterDate').value || new Date().toISOString().split('T')[0];
+  const headers = ['Date', 'Machine', 'Model', 'Section', 'Col', 'Row', 'Serial', 'Installed', 'Removed', 'Color', 'Ink Type'];
+  // Strip illegal XML characters (control chars that crash Excel XML parser)
+  const sanitize = s => typeof s === 'string' ? s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F￾￿]/g, '') : s;
+  // null = truly empty cell (SheetJS skips writing the XML node)
+  const ev = v => { const c = sanitize(v); return (c == null || c === '' || c === '—') ? null : c; };
+  const rows = [];
+  for (const item of cachedHistory) {
+    for (const h of (item.data || [])) {
+      rows.push([item.date, item.machine, ev(MODELS[item.machine]), 'Installed',
+        ev(h.Column), ev(h.Row), ev(h.Serial), ev(tsToDate(h.Installed)), 'Active', ev(h.Color), ev(h.InkType)]);
+    }
+    for (const h of (item.uninstalled || [])) {
+      rows.push([item.date, item.machine, ev(MODELS[item.machine]), 'Uninstalled',
+        null, null, ev(h.Serial), ev(tsToDate(h.Installed)), ev(tsToDate(h.Removed)), ev(h.Color), ev(h.InkType)]);
+    }
+  }
+  if (!rows.length) {
+    alert('ไม่มีข้อมูล printhead ใน record ที่พบ');
+    return;
+  }
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws['!cols'] = [{wch:12},{wch:8},{wch:12},{wch:13},{wch:5},{wch:5},{wch:16},{wch:14},{wch:14},{wch:14},{wch:18}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'History');
+  XLSX.writeFile(wb, `history_${dateVal}.xlsx`);
+}
+
+// Init
+applyI18n();
+document.getElementById('filterDate').value = new Date().toISOString().split('T')[0];
+searchHistory();
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+# machines.ini.example
+# ─────────────────────────────────────────────────────────────
+# คัดลอกไฟล์นี้แล้วเปลี่ยนชื่อเป็น machines.ini
+# จากนั้นแก้ IP ให้ตรงกับเครื่องในเครือข่ายของคุณ
+#
+#   cp machines.ini.example machines.ini   (Linux/Mac)
+#   copy machines.ini.example machines.ini (Windows)
+# ─────────────────────────────────────────────────────────────
+
+[machines]
+MS01 = 192.168.x.x
+MS02 = 192.168.x.x
+MS03 = 192.168.x.x
+
+[models]
+MS01 = JP4
+MS02 = JP4evo'17
+MS03 = JPKevo
+
+[settings]
+port    = 5000
+timeout = 5
